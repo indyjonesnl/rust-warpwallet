@@ -5,56 +5,14 @@ extern crate crypto;
 use self::crypto::scrypt::{scrypt, ScryptParams};
 use std::thread;
 
-const WARP_SCRYPT_ITERATIONS: u32 = 262144; // 2^18
-const WARP_KEY_LENGTH: usize = 32;
-const WARP_SCRYPT_CONCAT: &str = "\x01";
-const WARP_SCRYPT_MEM_DIFF: u32 = 8;
-const WARP_SCRYPT_PAR_DIFF: u32 = 1;
-
-pub fn perform_scrypt_bytes(pass_phrase: Vec<u8>, salt: Vec<u8>, cpu_difficulty: u32, mem_difficulty: u32, parallel_difficulty: u32, key_length: usize) -> Vec<u8> {
-    let handle = thread::spawn(move || {
+pub fn perform_scrypt(pass_phrase: Vec<u8>, salt: Vec<u8>, cpu_difficulty: u32, mem_difficulty: u32, parallel_difficulty: u32, key_length: usize) -> Vec<u8> {
+    thread::spawn(move || {
         let mut to_store = vec![0u8; key_length];
-        let params: ScryptParams = ScryptParams::new( log2(cpu_difficulty), mem_difficulty, parallel_difficulty);
+        let params: ScryptParams = ScryptParams::new(log2(cpu_difficulty), mem_difficulty, parallel_difficulty);
         scrypt(&pass_phrase, &salt, &params, &mut to_store);
         // return the byte array
         to_store
-    });
-    handle.join().unwrap()
-}
-
-pub fn perform_scrypt(pass_phrase: &str, salt: &str, cpu_difficulty: u32, mem_difficulty: u32, parallel_difficulty: u32, key_length: usize) -> Vec<u8> {
-    let params = ScryptParams::new( log2(cpu_difficulty), mem_difficulty, parallel_difficulty );
-
-    let mut to_store = vec![ 0u8; key_length ];
-    scrypt(pass_phrase.as_bytes(), salt.as_bytes(), &params, &mut to_store);
-    // return the byte array
-    to_store
-}
-
-pub fn perform_warp_scrypt(pass_phrase: &str, salt: &str) -> Vec<u8> {
-
-//    // Im thinking something like...
-//    let mut phrase_bytes: Vec<u8> = pass_phrase.as_bytes().to_vec();
-//    phrase_bytes.push(0x02);
-//
-//    let mut salt_bytes: Vec<u8> = salt.as_bytes().to_vec();
-//    salt_bytes.push(0x02);
-//
-//    perform_scrypt_bytes(phrase_bytes, salt_bytes)
-
-    // There has to be a more efficient way to append 1 stupid byte to a byte array...
-    let mut passphrase_extended = pass_phrase.to_string();
-    passphrase_extended.push_str(WARP_SCRYPT_CONCAT);
-    let mut salt_extended = salt.to_string();
-    salt_extended.push_str(WARP_SCRYPT_CONCAT);
-    perform_scrypt_bytes(
-        passphrase_extended.as_bytes().to_vec(),
-        salt_extended.as_bytes().to_vec(),
-        WARP_SCRYPT_ITERATIONS,
-        WARP_SCRYPT_MEM_DIFF,
-        WARP_SCRYPT_PAR_DIFF,
-        WARP_KEY_LENGTH
-    )
+    }).join().unwrap()
 }
 
 fn log2(number: u32) -> u8 {
@@ -83,11 +41,10 @@ fn log2(number: u32) -> u8 {
     }
 
     // The dynamic way of doing this:
-//    let handle = thread::spawn(move || {
+//    thread::spawn(move || {
 //        let nr = number as f32;
 //        nr.log2() as u8
-//    });
-//    handle.join().unwrap()
+//    }).join().unwrap()
 }
 
 #[test]
@@ -116,7 +73,7 @@ fn test_scrypt_vectors() {
     ];
     for tuple in vectors {
         println!("Testing phrase [{}] with salt [{}] and {} iterations.", tuple.1, tuple.2, tuple.3);
-        let result = hex::encode(perform_scrypt(tuple.1, tuple.2, tuple.3, tuple.4, tuple.5, tuple.6));
+        let result = hex::encode(perform_scrypt(tuple.1.as_bytes().to_vec(), tuple.2.as_bytes().to_vec(), tuple.3, tuple.4, tuple.5, tuple.6));
         assert_eq!(tuple.0, result);
     }
 }

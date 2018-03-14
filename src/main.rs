@@ -1,6 +1,7 @@
 
 extern crate hex;
 extern crate xor;
+extern crate threadpool;
 extern crate time;
 extern crate rand;
 
@@ -10,10 +11,15 @@ mod warpwallet;
 mod bitcoin;
 mod hexxor;
 mod sha256;
+mod threadtest;
 
 use time::PreciseTime;
 use rand::{thread_rng, Rng};
 use std::thread;
+
+use threadpool::ThreadPool;
+use std::sync::mpsc;
+use std::sync::mpsc::channel;
 
 // println! in tests are only visible with:
 //      cargo test -- --nocapture
@@ -25,17 +31,29 @@ const WARP_WALLET_SEARCH: &str = "1MkupVKiCik9iyfnLrJoZLx9RH4rkF3hnA";
 
 fn main() {
     let start = PreciseTime::now();
+    let iterations = 50;
 
-    // A simple speed test, to see how long it takes to generate this many new warpwallet addresses.
-    generate_new_keypair(20);
+    let (tx, rx): (mpsc::Sender<Vec<String>>, mpsc::Receiver<Vec<String>>) = mpsc::channel();
+
+    const SALT: [u8;5] = [97, 64, 98, 46, 99]; // a@b.c
+
+    for _inner_index in 0..iterations {
+        let cloned_tx = tx.clone();
+        thread::spawn(move || {
+            cloned_tx.send(warpwallet::print_phrase_wif_address_warp_wallet(generate_random_string(8).as_bytes().to_vec(), SALT.to_vec()));
+        });
+    }
+
+    for index in 0..iterations {
+        let result = rx.recv().unwrap();
+        println!("phrase [{}], wif [{}], addr [{}]", result[0], result[1], result[2]);
+        warpwallet::print_if_address_matches(&result[2]);
+    }
 
     let end = PreciseTime::now();
-    println!("{} seconds for this round.", start.to(end));
-}
-
-#[test]
-fn test_hex_decode() {
-    println!("{:?}", hex::decode("aa2d3c4a4ae6559e9f13f093cc6e32459c5249da723de810651b4b54373385e2").unwrap());
+    let run_time = start.to(end);
+    println!("{} seconds for this round.", run_time);
+    println!("That's {} seconds per phrase.", run_time/iterations);
 }
 
 // bitcoin: 1Awesome4ZhNYmUp5PApkz1qQMVkkVYLhA
@@ -62,36 +80,13 @@ fn test_hex_decode() {
 // ___$$$$$$$$$$$$$$$$$$$$$$$$
 // _____$$$$$$$$$$$$$$$$$$$$__
 
-fn generate_new_keypair(iterations: usize) {
-    for i in 0..iterations {
-        // Generate random string of 8 chars
-        let random_string = generate_random_string(8);
-        let exp = warpwallet::warpwallet(&random_string, WARP_WALLET_SALT);
-        let uncompressed_private = bitcoin::secret_exponent_to_private_key(exp.clone(), false);
-        let uncompressed_addr = bitcoin::private_key_wif_to_public_address(&uncompressed_private);
-        let compressed_private = bitcoin::secret_exponent_to_private_key(exp, true);
-        let compressed_addr = bitcoin::private_key_wif_to_public_address(&compressed_private);
-
-        // Print the resulting address anyway
-        println!("{}: {} uncompressed {} {}", i, random_string, uncompressed_addr, uncompressed_private);
-        println!("{}: {} compressed {} {}", i, random_string, compressed_addr, compressed_private);
-
-       if WARP_WALLET_SEARCH == uncompressed_addr {
-           println!("== ADDRESS FOUND == {}", &uncompressed_addr);
-       } else if WARP_WALLET_SEARCH == compressed_addr {
-           println!("== ADDRESS FOUND == {}", &compressed_addr);
-       }
-    }
-}
-
 fn generate_random_string(char_length: usize) -> String {
-    let handle = thread::spawn(move || {
+    thread::spawn(move || {
         thread_rng()
             .gen_ascii_chars()
             .take(char_length)
             .collect::<String>()
-    });
-    handle.join().unwrap()
+    }).join().unwrap()
 }
 
 #[test]

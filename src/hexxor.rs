@@ -6,10 +6,12 @@
 extern crate hex;
 extern crate xor;
 
-pub fn string_xor(s1: &str, s2: &str) -> String {
-    let s1_bytes = hex::decode(s1).unwrap();
-    let s2_bytes = hex::decode(s2).unwrap();
-    hex::encode(self::xor::xor(&s1_bytes, &s2_bytes))
+use std::thread;
+
+pub fn threaded_xor(s1: Vec<u8>, s2:Vec<u8>) -> Vec<u8> {
+    thread::spawn(move || {
+        xor::xor(&s1, &s2)
+    }).join().unwrap()
 }
 
 #[test]
@@ -20,6 +22,8 @@ fn test_xor_library() {
     if let Ok(string) = String::from_utf8(result) {
         assert_eq!("Hello, world!", string);
     }
+    let threaded_result = threaded_xor(vec![95, 80, 96, 71, 120, 25, 44, 92, 120, 71, 96, 79, 54], vec![23, 53, 12, 43]);
+    assert_eq!("Hello, world!", String::from_utf8(threaded_result).unwrap());
 }
 
 #[test]
@@ -90,6 +94,6 @@ fn test_hex_xor() {
     ];
     for tuple in vectors {
         println!("testing s1 [{}] and s2 [{}].", tuple.1, tuple.2);
-        assert_eq!(tuple.0, string_xor(tuple.1, tuple.2));
+        assert_eq!(tuple.0, hex::encode(xor::xor(&hex::decode(tuple.1).unwrap(), &hex::decode(tuple.2).unwrap())));
     }
 }

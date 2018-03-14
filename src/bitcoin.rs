@@ -12,20 +12,22 @@ use sha256::hash256;
 use std::thread;
 
 pub fn private_key_wif_to_public_address(hex: &str) -> String {
-    let sk: Privkey = FromBase58::from_base58check(hex).unwrap();
-    let secp = Secp256k1::new();
-    let pk = sk.to_address(&secp).unwrap();
-    pk.to_base58check()
+    let owned_string = hex.to_owned();
+    thread::spawn(move || {
+        let sk: Privkey = FromBase58::from_base58check(&owned_string).unwrap();
+        let secp = Secp256k1::new();
+        let pk = sk.to_address(&secp).unwrap();
+        pk.to_base58check()
+    }).join().unwrap()
 }
 
 pub fn secret_exponent_to_private_key(exponent: Vec<u8>, compressed: bool) -> String {
-    let handle = thread::spawn(move || {
+    thread::spawn(move || {
         let secp: Secp256k1 = Secp256k1::new();
         let secret_key = SecretKey::from_slice(&secp, &exponent).unwrap();
         let private_key = bitcoin::util::address::Privkey::from_key(Bitcoin, secret_key, compressed);
         private_key.to_base58check()
-    });
-    handle.join().unwrap()
+    }).join().unwrap()
 }
 
 #[test]
